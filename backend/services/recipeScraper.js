@@ -36,14 +36,34 @@ export async function scrapeRecipe(url) {
 
     return normalizedRecipe;
   } catch (error) {
-    // Provide more helpful error messages
-    if (error.message.includes('fetch')) {
+    // Catch library validation errors and provide user-friendly messages
+    if (error.message && error.message.includes('validation failed')) {
+      const hostname = new URL(url).hostname;
+      throw new Error(
+        `Unable to scrape this recipe from ${hostname}. This page format may not be supported. ` +
+        `Try a different recipe from the same site, or use a recipe from AllRecipes, Food Network, ` +
+        `Bon Appétit, or Serious Eats.`
+      );
+    }
+
+    // Provide more helpful error messages for other errors
+    if (error.message && error.message.includes('fetch')) {
       throw new Error('Unable to fetch the recipe. Please check the URL and try again.');
     }
-    if (error.message.includes('parse')) {
+    if (error.message && error.message.includes('parse')) {
       throw new Error('Unable to parse the recipe. This site may not be supported.');
     }
-    throw error;
+
+    // If we already threw a custom error, re-throw it
+    if (error.message && error.message.includes('Unable to extract recipe data')) {
+      throw error;
+    }
+
+    // Generic error with helpful guidance
+    throw new Error(
+      error.message ||
+      'Failed to scrape this recipe. Please try a different recipe URL from a supported site.'
+    );
   }
 }
 
