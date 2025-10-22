@@ -13,7 +13,7 @@ export const DETECTION_PATTERNS = {
   // DIRECT EQUIPMENT MENTIONS - Explicit references to tools
   direct_mentions: {
     // Pans & Skillets
-    'frying_pan': ['frying pan', 'skillet', 'pan', 'non-stick pan', 'nonstick pan'],
+    'frying_pan': ['frying pan', 'skillet', 'fry pan', 'non-stick pan', 'nonstick pan'],
     'saute_pan': ['sauté pan', 'saute pan', 'sautéing pan'],
     'cast_iron_pan': ['cast iron', 'cast-iron pan', 'cast iron skillet', 'iron skillet'],
     'wok': ['wok', 'stir-fry pan', 'asian pan'],

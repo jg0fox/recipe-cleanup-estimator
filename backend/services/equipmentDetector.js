@@ -51,12 +51,18 @@ function findAllEquipmentMentions(recipeText) {
       const matches = [...recipeText.matchAll(regex)];
 
       for (const match of matches) {
+        // Extract context around the match (30 chars before and after)
+        const contextStart = Math.max(0, match.index - 30);
+        const contextEnd = Math.min(recipeText.length, match.index + match[0].length + 30);
+        const context = recipeText.substring(contextStart, contextEnd).trim();
+
         mentions.push({
           type: equipmentType,
           term: match[0],
           position: match.index,
           confidence: 0.95,
-          source: 'direct_mention'
+          source: 'direct_mention',
+          context: `...${context}...`
         });
       }
     }
@@ -141,6 +147,13 @@ function groupAndQuantifyMentions(mentions, recipeText) {
   for (const equipmentType of Object.keys(grouped)) {
     const quantityAnalysis = detectQuantityForEquipment(equipmentType, recipeText, grouped[equipmentType].mentions);
     grouped[equipmentType].quantity = quantityAnalysis.quantity;
+
+    // Add source citations from mentions
+    const uniqueContexts = [...new Set(grouped[equipmentType].mentions.map(m => m.context).filter(Boolean))];
+    if (uniqueContexts.length > 0) {
+      grouped[equipmentType].reasoning.push(`Found in recipe: "${uniqueContexts[0]}"`);
+    }
+
     grouped[equipmentType].reasoning.push(...quantityAnalysis.reasoning);
   }
 
