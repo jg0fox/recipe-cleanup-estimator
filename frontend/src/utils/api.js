@@ -35,6 +35,35 @@ export async function analyzeRecipe(url, userPreferences = {}) {
 }
 
 /**
+ * Analyze a kitchen photo and get cleanup time estimate
+ * @param {File} photoFile - Image file
+ * @param {Object} userPreferences - User cleaning preferences
+ * @returns {Promise<Object>} Analysis results
+ */
+export async function analyzeKitchenPhoto(photoFile, userPreferences = {}) {
+  const formData = new FormData();
+  formData.append('photo', photoFile);
+  formData.append('userPreferences', JSON.stringify({
+    hasDishwasher: userPreferences.hasDishwasher || false,
+    cleaningStyle: userPreferences.cleaningStyle || 'normal',
+    prefersSoaking: userPreferences.prefersSoaking || false,
+  }));
+
+  const response = await fetch(`${API_BASE_URL}/api/analyze-photo`, {
+    method: 'POST',
+    body: formData,
+    // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to analyze photo');
+  }
+
+  return response.json();
+}
+
+/**
  * Submit user feedback
  * @param {Object} feedbackData - Feedback data
  * @returns {Promise<Object>} Submission result

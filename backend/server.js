@@ -44,9 +44,11 @@ app.get('/', (req, res) => {
 // API Routes
 import analyzeRoutes from './routes/analyze.js';
 import feedbackRoutes from './routes/feedback.js';
+import photoAnalysisRoutes from './routes/photoAnalysis.js';
 
 app.use('/api', analyzeRoutes);
 app.use('/api', feedbackRoutes);
+app.use('/api', photoAnalysisRoutes);
 
 // 404 handler
 app.use((req, res) => {
