@@ -7,12 +7,13 @@
  */
 
 export const EQUIPMENT_TYPES = {
-  // COOKWARE - Pots & Pans
-  'frying_pan': { baseTime: 180, dishwasherSafe: true, category: 'cookware' },
+  // COOKWARE - Pots & Pans (Material-specific types listed first for priority matching)
+  'cast_iron_pan': { baseTime: 240, dishwasherSafe: false, category: 'cookware' },
+  'stainless_steel_pan': { baseTime: 200, dishwasherSafe: true, category: 'cookware' },
+  'nonstick_pan': { baseTime: 120, dishwasherSafe: true, category: 'cookware' },
+  'frying_pan': { baseTime: 180, dishwasherSafe: true, category: 'cookware' }, // Generic/default pan
   'skillet': { baseTime: 180, dishwasherSafe: true, category: 'cookware' },
   'saute_pan': { baseTime: 200, dishwasherSafe: true, category: 'cookware' },
-  'cast_iron_pan': { baseTime: 240, dishwasherSafe: false, category: 'cookware' },
-  'nonstick_pan': { baseTime: 120, dishwasherSafe: true, category: 'cookware' },
   'wok': { baseTime: 150, dishwasherSafe: false, category: 'cookware' },
   'grill_pan': { baseTime: 250, dishwasherSafe: true, category: 'cookware' },
   'griddle': { baseTime: 200, dishwasherSafe: true, category: 'cookware' },

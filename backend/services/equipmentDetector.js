@@ -388,6 +388,16 @@ function detectImpliedEquipment(recipeText, existingInstances) {
 function resolveEquipmentConflicts(instances) {
   const resolved = {};
 
+  // Define pan type hierarchy - more specific types take precedence
+  const panTypes = new Set(['cast_iron_pan', 'stainless_steel_pan', 'nonstick_pan', 'frying_pan', 'skillet']);
+  const panTypeSpecificity = {
+    'cast_iron_pan': 3,
+    'stainless_steel_pan': 3,
+    'nonstick_pan': 3,
+    'frying_pan': 1,
+    'skillet': 1
+  };
+
   for (const instance of instances) {
     // If we haven't seen this type before, or this instance has higher confidence, use it
     if (!resolved[instance.type] || resolved[instance.type].confidence < instance.confidence) {
@@ -402,6 +412,25 @@ function resolveEquipmentConflicts(instances) {
         ...new Set([...resolved[instance.type].reasoning, ...instance.reasoning])
       ];
     }
+  }
+
+  // Remove generic pan types if we have specific material types
+  const detectedPanTypes = Object.keys(resolved).filter(type => panTypes.has(type));
+
+  if (detectedPanTypes.length > 1) {
+    // Find the most specific pan type
+    const mostSpecific = detectedPanTypes.reduce((best, current) => {
+      const bestSpec = panTypeSpecificity[best] || 0;
+      const currentSpec = panTypeSpecificity[current] || 0;
+      return currentSpec > bestSpec ? current : best;
+    });
+
+    // Remove generic pan types if we have a more specific one
+    detectedPanTypes.forEach(panType => {
+      if (panType !== mostSpecific && panTypeSpecificity[panType] < panTypeSpecificity[mostSpecific]) {
+        delete resolved[panType];
+      }
+    });
   }
 
   return Object.values(resolved);

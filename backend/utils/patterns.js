@@ -11,14 +11,30 @@
 
 export const DETECTION_PATTERNS = {
   // DIRECT EQUIPMENT MENTIONS - Explicit references to tools
+  // NOTE: Order matters! More specific patterns (cast iron, stainless, nonstick)
+  // are checked first, then generic patterns (frying pan) serve as fallback
   direct_mentions: {
-    // Pans & Skillets
-    'frying_pan': ['frying pan', 'skillet', 'fry pan', 'non-stick pan', 'nonstick pan'],
-    'saute_pan': ['sauté pan', 'saute pan', 'sautéing pan'],
-    'cast_iron_pan': ['cast iron', 'cast-iron pan', 'cast iron skillet', 'iron skillet'],
-    'wok': ['wok', 'stir-fry pan', 'asian pan'],
-    'grill_pan': ['grill pan', 'grilling pan', 'ridged pan'],
-    'griddle': ['griddle', 'flat griddle', 'electric griddle'],
+    // Material-specific pans (checked first for priority)
+    'cast_iron_pan': [
+      'cast iron pan', 'cast-iron pan', 'cast iron skillet', 'cast-iron skillet',
+      'iron skillet', 'cast iron frying pan', 'seasoned pan', 'seasoned skillet'
+    ],
+    'stainless_steel_pan': [
+      'stainless steel pan', 'stainless pan', 'stainless steel skillet',
+      'stainless skillet', 'steel pan', 'stainless frying pan', 'steel skillet',
+      'tri-ply pan', 'clad pan'
+    ],
+    'nonstick_pan': [
+      'nonstick pan', 'non-stick pan', 'nonstick skillet', 'non-stick skillet',
+      'teflon pan', 'teflon skillet', 'coated pan', 'nonstick frying pan'
+    ],
+
+    // Generic pans (fallback when material not specified)
+    'frying_pan': ['frying pan', 'skillet', 'fry pan', 'sauté skillet'],
+    'saute_pan': ['sauté pan', 'saute pan', 'sautéing pan', 'sauteuse'],
+    'wok': ['wok', 'stir-fry pan', 'asian pan', 'carbon steel wok'],
+    'grill_pan': ['grill pan', 'grilling pan', 'ridged pan', 'griddle pan'],
+    'griddle': ['griddle', 'flat griddle', 'electric griddle', 'pancake griddle'],
 
     // Pots
     'saucepan': ['saucepan', 'sauce pan', 'small pot', 'medium pot'],
