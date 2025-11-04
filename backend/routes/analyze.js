@@ -38,7 +38,12 @@ router.post('/analyze-recipe', async (req, res) => {
             totalTime: cached.scrapedData.totalTime,
             servings: cached.scrapedData.servings,
             image: cached.scrapedData.image,
-            url: cached.scrapedData.url
+            url: cached.scrapedData.url,
+            ingredients: cached.scrapedData.ingredients || [],
+            instructions: cached.scrapedData.instructions || [],
+            prepTime: cached.scrapedData.prepTime,
+            cookTime: cached.scrapedData.cookTime,
+            description: cached.scrapedData.description || cached.scrapedData.summary
           },
           cleanup,
           cached: true
@@ -71,7 +76,12 @@ router.post('/analyze-recipe', async (req, res) => {
           totalTime: recipe.totalTime,
           servings: recipe.servings,
           image: recipe.image,
-          url: recipe.url
+          url: recipe.url,
+          ingredients: recipe.ingredients || [],
+          instructions: recipe.instructions || [],
+          prepTime: recipe.prepTime,
+          cookTime: recipe.cookTime,
+          description: recipe.description || recipe.summary
         },
         cleanup,
         cached: false
