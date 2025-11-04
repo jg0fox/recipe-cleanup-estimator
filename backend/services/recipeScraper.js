@@ -43,6 +43,167 @@ function normalizeJsonLdInstructions(instructions) {
 }
 
 /**
+ * Scrape recipe data from generic HTML using common patterns
+ * @param {string} url - Recipe URL to scrape
+ * @param {string} html - HTML content
+ * @returns {Object} Scraped recipe data from HTML patterns
+ */
+function scrapeGenericHtml(url, html) {
+  const $ = cheerio.load(html);
+
+  // Detect which recipe plugin/system is being used
+  const hasWPRM = html.includes('wprm-recipe');
+  const hasTasty = html.includes('tasty-recipe');
+  const hasCard = html.includes('card ingredients') || html.includes('card directions');
+
+  let title = '';
+  let ingredients = [];
+  let instructions = [];
+
+  // Try different extraction strategies based on detected plugin
+  if (hasWPRM) {
+    // WP Recipe Maker plugin
+    title = $('.wprm-recipe-name').first().text().trim() ||
+            $('.recipe h1').first().text().trim() ||
+            $('.recipe h2').first().text().trim();
+
+    // Ingredients
+    $('.wprm-recipe-ingredients-container li, .wprm-recipe-ingredient').each((i, elem) => {
+      const text = $(elem).text().trim();
+      if (text && text.length > 0) {
+        ingredients.push(text);
+      }
+    });
+
+    // Instructions
+    $('.wprm-recipe-instructions-container li, .wprm-recipe-instruction').each((i, elem) => {
+      const text = $(elem).find('.wprm-recipe-instruction-text').text().trim() || $(elem).text().trim();
+      if (text && text.length > 0) {
+        instructions.push(text);
+      }
+    });
+  } else if (hasTasty) {
+    // Tasty Recipes plugin
+    title = $('.tasty-recipes-title, .tasty-recipe-title').first().text().trim() ||
+            $('.recipe h1').first().text().trim();
+
+    // Ingredients
+    $('.tasty-recipes-ingredients li, .tasty-recipe-ingredients li').each((i, elem) => {
+      const text = $(elem).text().trim();
+      if (text && text.length > 0) {
+        ingredients.push(text);
+      }
+    });
+
+    // Instructions
+    $('.tasty-recipes-instructions li, .tasty-recipe-instructions li').each((i, elem) => {
+      const text = $(elem).text().trim();
+      if (text && text.length > 0) {
+        instructions.push(text);
+      }
+    });
+  } else if (hasCard) {
+    // Card-based recipe layout (Webflow, custom themes)
+    title = $('.recipe h1, .recipe h2').first().text().trim();
+
+    // Ingredients
+    $('.card.ingredients ul li, [class*="ingredient"] ul li').each((i, elem) => {
+      const text = $(elem).text().trim();
+      if (text && text.length > 0) {
+        ingredients.push(text);
+      }
+    });
+
+    // Instructions
+    $('.card.directions ol li, [class*="direction"] ol li, [class*="instruction"] ol li').each((i, elem) => {
+      const text = $(elem).text().trim();
+      if (text && text.length > 0) {
+        instructions.push(text);
+      }
+    });
+  } else {
+    // Generic fallback - look for common patterns
+    title = $('h1[class*="recipe"], h2[class*="recipe"]').first().text().trim() ||
+            $('.recipe h1, .recipe h2').first().text().trim() ||
+            $('h1').first().text().trim();
+
+    // Try to find ingredients by looking for headings containing "ingredient"
+    $('h2, h3, h4').each((i, heading) => {
+      const headingText = $(heading).text().toLowerCase();
+      if (headingText.includes('ingredient')) {
+        // Get the next sibling ul
+        const list = $(heading).next('ul');
+        if (list.length > 0) {
+          list.find('li').each((j, li) => {
+            const text = $(li).text().trim();
+            if (text && text.length > 0) {
+              ingredients.push(text);
+            }
+          });
+        }
+      }
+    });
+
+    // Try to find instructions by looking for headings containing "instruction" or "direction"
+    $('h2, h3, h4').each((i, heading) => {
+      const headingText = $(heading).text().toLowerCase();
+      if (headingText.includes('instruction') || headingText.includes('direction')) {
+        // Get the next sibling ol or ul
+        const list = $(heading).next('ol, ul');
+        if (list.length > 0) {
+          list.find('li').each((j, li) => {
+            const text = $(li).text().trim();
+            if (text && text.length > 0) {
+              instructions.push(text);
+            }
+          });
+        }
+      }
+    });
+
+    // If still no ingredients/instructions, look for any lists with ingredient/instruction classes
+    if (ingredients.length === 0) {
+      $('[class*="ingredient"] li').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text && text.length > 0) {
+          ingredients.push(text);
+        }
+      });
+    }
+
+    if (instructions.length === 0) {
+      $('[class*="instruction"] li, [class*="direction"] li').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text && text.length > 0) {
+          instructions.push(text);
+        }
+      });
+    }
+  }
+
+  // Validate we got minimum data
+  if (!title || ingredients.length === 0 || instructions.length === 0) {
+    throw new Error(
+      `Incomplete recipe data from HTML parsing (title: ${!!title}, ` +
+      `ingredients: ${ingredients.length}, instructions: ${instructions.length})`
+    );
+  }
+
+  // Return normalized format
+  return {
+    title: title,
+    ingredients: ingredients,
+    instructions: instructions,
+    totalTime: 'Unknown',
+    prepTime: null,
+    cookTime: null,
+    servings: 'Unknown',
+    image: null,
+    url: url
+  };
+}
+
+/**
  * Scrape recipe data from JSON-LD structured data
  * @param {string} url - Recipe URL to scrape
  * @returns {Promise<Object>} Scraped recipe data from JSON-LD
@@ -186,41 +347,72 @@ export async function scrapeRecipe(url) {
     // Primary scraper failed, try JSON-LD fallback
     console.log(`Primary scraper failed (${primaryError.message}), attempting JSON-LD fallback...`);
 
+    let htmlContent = null;
+
     try {
       const jsonLdRecipe = await scrapeJsonLd(url);
       console.log(`✓ Recipe scraped successfully using JSON-LD fallback: ${jsonLdRecipe.title}`);
       return jsonLdRecipe;
 
     } catch (jsonLdError) {
-      // Both methods failed, provide helpful error message
-      console.error('Both scraping methods failed:', {
-        primary: primaryError.message,
-        jsonLd: jsonLdError.message
-      });
+      // JSON-LD failed, try generic HTML scraping (Layer 3)
+      console.log(`JSON-LD scraping failed (${jsonLdError.message}), attempting generic HTML scraping...`);
 
-      const hostname = new URL(url).hostname;
+      try {
+        // Fetch HTML if we don't have it yet
+        if (!htmlContent) {
+          const response = await axios.get(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.5',
+              'Accept-Encoding': 'gzip, deflate, br',
+              'DNT': '1',
+              'Connection': 'keep-alive',
+              'Upgrade-Insecure-Requests': '1'
+            },
+            timeout: 10000
+          });
+          htmlContent = response.data;
+        }
 
-      // Provide specific error messages based on failure type
-      if (primaryError.message && primaryError.message.includes('validation failed')) {
+        const genericRecipe = scrapeGenericHtml(url, htmlContent);
+        console.log(`✓ Recipe scraped successfully using generic HTML scraping: ${genericRecipe.title}`);
+        return genericRecipe;
+
+      } catch (genericHtmlError) {
+        // All three methods failed, provide helpful error message
+        console.error('All scraping methods failed:', {
+          primary: primaryError.message,
+          jsonLd: jsonLdError.message,
+          genericHtml: genericHtmlError.message
+        });
+
+        const hostname = new URL(url).hostname;
+
+        // Provide specific error messages based on failure type
+        if (primaryError.message && primaryError.message.includes('validation failed')) {
+          throw new Error(
+            `Unable to scrape this recipe from ${hostname}. The site may not be supported or the recipe format is unusual. ` +
+            `We tried standard scraping, JSON-LD extraction, and generic HTML parsing.`
+          );
+        }
+
+        if (primaryError.message && primaryError.message.includes('Site not yet supported')) {
+          throw new Error(
+            `This recipe site (${hostname}) is not directly supported, and we couldn't extract recipe data using fallback methods. ` +
+            `Try a recipe from AllRecipes, Food Network, Bon Appétit, or other major recipe sites.`
+          );
+        }
+
+        // Generic error with helpful guidance
         throw new Error(
-          `Unable to scrape this recipe from ${hostname}. The site may not be supported or the recipe format is unusual. ` +
-          `We tried both standard scraping and structured data extraction.`
+          `Unable to extract recipe data from ${hostname}. ` +
+          `This site may not have properly formatted recipe data. ` +
+          `We tried multiple extraction methods without success. ` +
+          `Try a different recipe or use a recipe from a major recipe website.`
         );
       }
-
-      if (primaryError.message && primaryError.message.includes('Site not yet supported')) {
-        throw new Error(
-          `This recipe site (${hostname}) is not directly supported, and we couldn't find valid recipe structured data. ` +
-          `Try a recipe from AllRecipes, Food Network, Bon Appétit, or other major recipe sites.`
-        );
-      }
-
-      // Generic error with helpful guidance
-      throw new Error(
-        `Unable to extract recipe data from ${hostname}. ` +
-        `This site may not have properly formatted recipe data. ` +
-        `Try a different recipe or use a recipe from a major recipe website.`
-      );
     }
   }
 }
