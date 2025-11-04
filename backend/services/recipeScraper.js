@@ -1,4 +1,148 @@
 import recipeScraper from '@brandonrjguth/recipe-scraper';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+
+/**
+ * Normalize JSON-LD instructions into an array of strings
+ * @param {string|Array|Object} instructions - Raw instructions from JSON-LD
+ * @returns {Array<string>} Normalized instruction steps
+ */
+function normalizeJsonLdInstructions(instructions) {
+  if (!instructions) {
+    return [];
+  }
+
+  // If it's an array
+  if (Array.isArray(instructions)) {
+    return instructions
+      .map(step => {
+        // HowToStep objects have a 'text' property
+        if (typeof step === 'object' && step.text) {
+          return step.text;
+        }
+        // HowToSection objects have itemListElement
+        if (typeof step === 'object' && step.itemListElement) {
+          return normalizeJsonLdInstructions(step.itemListElement);
+        }
+        // Plain strings
+        if (typeof step === 'string') {
+          return step;
+        }
+        return null;
+      })
+      .flat()
+      .filter(step => typeof step === 'string' && step.trim().length > 0);
+  }
+
+  // If it's a string, split it into steps
+  if (typeof instructions === 'string') {
+    return normalizeInstructions(instructions);
+  }
+
+  return [];
+}
+
+/**
+ * Scrape recipe data from JSON-LD structured data
+ * @param {string} url - Recipe URL to scrape
+ * @returns {Promise<Object>} Scraped recipe data from JSON-LD
+ */
+async function scrapeJsonLd(url) {
+  try {
+    // Fetch the HTML with browser-like headers
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+      },
+      timeout: 10000
+    });
+
+    const html = response.data;
+    const $ = cheerio.load(html);
+
+    // Find all JSON-LD script tags
+    const jsonLdScripts = $('script[type="application/ld+json"]');
+
+    let recipeData = null;
+
+    // Parse each JSON-LD script and look for Recipe schema
+    jsonLdScripts.each((i, elem) => {
+      try {
+        const jsonContent = $(elem).html();
+        const data = JSON.parse(jsonContent);
+
+        // Handle single object or array of objects
+        const dataArray = Array.isArray(data) ? data : [data];
+
+        // Look for Recipe type
+        for (const item of dataArray) {
+          if (item['@type'] === 'Recipe' ||
+              (Array.isArray(item['@type']) && item['@type'].includes('Recipe'))) {
+            recipeData = item;
+            break;
+          }
+          // Sometimes Recipe is nested in @graph
+          if (item['@graph']) {
+            const graphRecipe = item['@graph'].find(g =>
+              g['@type'] === 'Recipe' ||
+              (Array.isArray(g['@type']) && g['@type'].includes('Recipe'))
+            );
+            if (graphRecipe) {
+              recipeData = graphRecipe;
+              break;
+            }
+          }
+        }
+
+        if (recipeData) return false; // Break the .each loop
+      } catch (parseError) {
+        // Continue to next script tag if this one fails to parse
+      }
+    });
+
+    if (!recipeData) {
+      throw new Error('No Recipe structured data found in JSON-LD');
+    }
+
+    // Extract and normalize recipe data
+    const ingredients = Array.isArray(recipeData.recipeIngredient)
+      ? recipeData.recipeIngredient
+      : [];
+
+    const instructions = normalizeJsonLdInstructions(
+      recipeData.recipeInstructions || []
+    );
+
+    // Validate minimum required data
+    if (!recipeData.name || ingredients.length === 0 || instructions.length === 0) {
+      throw new Error('Incomplete recipe data in JSON-LD (missing name, ingredients, or instructions)');
+    }
+
+    // Normalize to app's data structure
+    const normalizedRecipe = {
+      title: recipeData.name || 'Unknown Recipe',
+      ingredients: ingredients,
+      instructions: instructions,
+      totalTime: recipeData.totalTime || 'Unknown',
+      prepTime: recipeData.prepTime || null,
+      cookTime: recipeData.cookTime || null,
+      servings: recipeData.recipeYield || recipeData.yield || 'Unknown',
+      image: recipeData.image?.url || recipeData.image || null,
+      url: url
+    };
+
+    return normalizedRecipe;
+  } catch (error) {
+    // Re-throw with context
+    throw new Error(`JSON-LD scraping failed: ${error.message}`);
+  }
+}
 
 /**
  * Scrape recipe data from a URL
@@ -6,14 +150,15 @@ import recipeScraper from '@brandonrjguth/recipe-scraper';
  * @returns {Promise<Object>} Scraped recipe data
  */
 export async function scrapeRecipe(url) {
-  try {
-    // Validate URL format
-    const urlPattern = /^https?:\/\/.+/i;
-    if (!urlPattern.test(url)) {
-      throw new Error('Invalid URL format. Please provide a valid HTTP/HTTPS URL.');
-    }
+  // Validate URL format
+  const urlPattern = /^https?:\/\/.+/i;
+  if (!urlPattern.test(url)) {
+    throw new Error('Invalid URL format. Please provide a valid HTTP/HTTPS URL.');
+  }
 
-    // Use recipe-scraper to fetch and parse recipe
+  // Try the primary scraper first
+  try {
+    // Use recipe-scraper library to fetch and parse recipe
     const recipe = await recipeScraper(url);
 
     // Normalize the recipe data
@@ -34,36 +179,49 @@ export async function scrapeRecipe(url) {
       throw new Error('Unable to extract recipe data from this URL. The site may not be supported.');
     }
 
+    console.log(`✓ Recipe scraped successfully using primary scraper: ${normalizedRecipe.title}`);
     return normalizedRecipe;
-  } catch (error) {
-    // Catch library validation errors and provide user-friendly messages
-    if (error.message && error.message.includes('validation failed')) {
+
+  } catch (primaryError) {
+    // Primary scraper failed, try JSON-LD fallback
+    console.log(`Primary scraper failed (${primaryError.message}), attempting JSON-LD fallback...`);
+
+    try {
+      const jsonLdRecipe = await scrapeJsonLd(url);
+      console.log(`✓ Recipe scraped successfully using JSON-LD fallback: ${jsonLdRecipe.title}`);
+      return jsonLdRecipe;
+
+    } catch (jsonLdError) {
+      // Both methods failed, provide helpful error message
+      console.error('Both scraping methods failed:', {
+        primary: primaryError.message,
+        jsonLd: jsonLdError.message
+      });
+
       const hostname = new URL(url).hostname;
+
+      // Provide specific error messages based on failure type
+      if (primaryError.message && primaryError.message.includes('validation failed')) {
+        throw new Error(
+          `Unable to scrape this recipe from ${hostname}. The site may not be supported or the recipe format is unusual. ` +
+          `We tried both standard scraping and structured data extraction.`
+        );
+      }
+
+      if (primaryError.message && primaryError.message.includes('Site not yet supported')) {
+        throw new Error(
+          `This recipe site (${hostname}) is not directly supported, and we couldn't find valid recipe structured data. ` +
+          `Try a recipe from AllRecipes, Food Network, Bon Appétit, or other major recipe sites.`
+        );
+      }
+
+      // Generic error with helpful guidance
       throw new Error(
-        `Unable to scrape this recipe from ${hostname}. This page format may not be supported. ` +
-        `Try a different recipe from the same site, or use a recipe from AllRecipes, Food Network, ` +
-        `Bon Appétit, or Serious Eats.`
+        `Unable to extract recipe data from ${hostname}. ` +
+        `This site may not have properly formatted recipe data. ` +
+        `Try a different recipe or use a recipe from a major recipe website.`
       );
     }
-
-    // Provide more helpful error messages for other errors
-    if (error.message && error.message.includes('fetch')) {
-      throw new Error('Unable to fetch the recipe. Please check the URL and try again.');
-    }
-    if (error.message && error.message.includes('parse')) {
-      throw new Error('Unable to parse the recipe. This site may not be supported.');
-    }
-
-    // If we already threw a custom error, re-throw it
-    if (error.message && error.message.includes('Unable to extract recipe data')) {
-      throw error;
-    }
-
-    // Generic error with helpful guidance
-    throw new Error(
-      error.message ||
-      'Failed to scrape this recipe. Please try a different recipe URL from a supported site.'
-    );
   }
 }
 

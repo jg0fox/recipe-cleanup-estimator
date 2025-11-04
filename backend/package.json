@@ -18,6 +18,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
     "@brandonrjguth/recipe-scraper": "^2.7.1",
+    "axios": "^1.13.1",
     "better-sqlite3": "^9.2.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
