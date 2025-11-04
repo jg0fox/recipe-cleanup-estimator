@@ -1,13 +1,17 @@
 import { useState } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Navigation from './components/Navigation';
 import RecipeForm from './components/RecipeForm';
 import ResultsDisplay from './components/ResultsDisplay';
 import BreakdownTable from './components/BreakdownTable';
 import FeedbackWidget from './components/FeedbackWidget';
 import PhotoUpload from './components/PhotoUpload';
 import PhotoResults from './components/PhotoResults';
+import SavedRecipes from './components/SavedRecipes';
+import CookMode from './components/CookMode';
 import { analyzeRecipe, analyzeKitchenPhoto } from './utils/api';
 
-function App() {
+function HomePage() {
   const [mode, setMode] = useState('recipe'); // 'recipe' or 'photo'
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -65,10 +69,7 @@ function App() {
       {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Kitchen Cleanup Time Estimator
-          </h1>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="text-sm text-gray-600">
             Analyze recipes or kitchen photos to estimate cleanup time
           </p>
         </div>
@@ -214,11 +215,24 @@ function App() {
       <footer className="bg-white border-t border-gray-200 mt-12">
         <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-gray-500">
-            Built with React, Tailwind CSS, Express, and Claude AI
+            Mess + Seer = Messeer. We see your kitchen's future.
           </p>
         </div>
       </footer>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Navigation />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/saved" element={<SavedRecipes />} />
+        <Route path="/cook/:recipeId" element={<CookMode />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
